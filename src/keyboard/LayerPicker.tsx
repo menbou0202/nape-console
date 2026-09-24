@@ -210,7 +210,7 @@ export const LayerPicker = ({
         }
         className="ml-2 items-center justify-center cursor-pointer"
         onSelectionChange={selectionChanged}
-        dragAndDropHooks={dragAndDropHooks}
+        dragAndDropHooks={onLayerMoved ? dragAndDropHooks : undefined}
         {...props}
       >
         {(layer_item) => (
@@ -218,13 +218,18 @@ export const LayerPicker = ({
             textValue={layer_item.name}
             className="p-1 b-1 my-1 group grid grid-cols-[1fr_auto] items-center aria-selected:bg-primary aria-selected:text-primary-content border rounded border-transparent border-solid hover:bg-base-300"
           >
-            <span>{layer_item.name}</span>
-            <Pencil
-              className="h-4 w-4 mx-1 invisible group-hover:visible"
-              onClick={() =>
-                setEditLabelData({ id: layer_item.id, name: layer_item.name })
-              }
-            />
+            <span className="grid grid-cols-[2rem_1fr] items-baseline">
+              <span className="text-xs tabular-nums opacity-60">{layer_item.index}</span>
+              <span>{layer_item.name}</span>
+            </span>
+            {onLayerNameChanged && (
+              <Pencil
+                className="h-4 w-4 mx-1 invisible group-hover:visible"
+                onClick={() =>
+                  setEditLabelData({ id: layer_item.id, name: layer_item.name })
+                }
+              />
+            )}
           </ListBoxItem>
         )}
       </ListBox>

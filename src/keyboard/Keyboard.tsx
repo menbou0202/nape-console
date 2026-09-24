@@ -3,7 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
-  useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -13,15 +13,14 @@ import {
   PhysicalLayout,
   Keymap,
   SetLayerBindingResponse,
-  SetLayerPropsResponse,
   BehaviorBinding,
-  Layer,
 } from "@zmkfirmware/zmk-studio-ts-client/keymap";
 import type { GetBehaviorDetailsResponse } from "@zmkfirmware/zmk-studio-ts-client/behaviors";
 
 import { LayerPicker } from "./LayerPicker";
 import { PhysicalLayoutPicker } from "./PhysicalLayoutPicker";
 import { Keymap as KeymapComp } from "./Keymap";
+import { SlotPalette } from "./SlotPalette";
 import { useConnectedDeviceData } from "../rpc/useConnectedDeviceData";
 import { ConnectionContext } from "../rpc/ConnectionContext";
 import { UndoRedoContext } from "../undoRedo";
@@ -182,6 +181,15 @@ export default function Keyboard() {
   const [selectedKeyPosition, setSelectedKeyPosition] = useState<
     number | undefined
   >(undefined);
+  const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
+  const [keyLabels, setKeyLabels] = useState<Record<string, string>>({});
+  const panGesture = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  }>();
   const behaviors = useBehaviors();
 
   const conn = useContext(ConnectionContext);
@@ -190,6 +198,7 @@ export default function Keyboard() {
   useEffect(() => {
     setSelectedLayerIndex(0);
     setSelectedKeyPosition(undefined);
+    setKeyLabels({});
   }, [conn]);
 
   useEffect(() => {
@@ -230,19 +239,20 @@ export default function Keyboard() {
     [undoRedo, selectedPhysicalLayoutIndex]
   );
 
-  let doUpdateBinding = useCallback(
-    (binding: BehaviorBinding) => {
-      if (!keymap || selectedKeyPosition === undefined) {
+  let doApplyBinding = useCallback(
+    (binding: BehaviorBinding, keyPosition: number, slotLabel?: string, clearLabel = false) => {
+      if (!keymap) {
         console.error(
-          "Can't update binding without a selected key position and loaded keymap"
+          "Can't update binding without a loaded keymap"
         );
         return;
       }
 
       const layer = selectedLayerIndex;
       const layerId = keymap.layers[layer].id;
-      const keyPosition = selectedKeyPosition;
       const oldBinding = keymap.layers[layer].bindings[keyPosition];
+      const labelKey = `${layer}:${keyPosition}`;
+      const oldLabel = keyLabels[labelKey];
       undoRedo?.(async () => {
         if (!conn.conn) {
           throw new Error("Not connected");
@@ -261,6 +271,18 @@ export default function Keyboard() {
               draft.layers[layer].bindings[keyPosition] = binding;
             })
           );
+          if (slotLabel) {
+            setKeyLabels((current) => ({
+              ...current,
+              [labelKey]: slotLabel,
+            }));
+          } else if (clearLabel) {
+            setKeyLabels((current) => {
+              const next = { ...current };
+              delete next[labelKey];
+              return next;
+            });
+          }
         } else {
           console.error("Failed to set binding", resp.keymap?.setLayerBinding);
         }
@@ -284,211 +306,24 @@ export default function Keyboard() {
                 draft.layers[layer].bindings[keyPosition] = oldBinding;
               })
             );
+            setKeyLabels((current) => {
+              const restored = { ...current };
+              if (oldLabel) restored[labelKey] = oldLabel;
+              else delete restored[labelKey];
+              return restored;
+            });
           } else {
           }
         };
       });
     },
-    [conn, keymap, undoRedo, selectedLayerIndex, selectedKeyPosition]
+    [conn, keyLabels, keymap, undoRedo, selectedLayerIndex]
   );
 
-  let selectedBinding = useMemo(() => {
-    if (keymap == null || selectedKeyPosition == null || !keymap.layers[selectedLayerIndex]) {
-      return null;
-    }
-
-    return keymap.layers[selectedLayerIndex].bindings[selectedKeyPosition];
-  }, [keymap, selectedLayerIndex, selectedKeyPosition]);
-
-  const moveLayer = useCallback(
-    (start: number, end: number) => {
-      const doMove = async (startIndex: number, destIndex: number) => {
-        if (!conn.conn) {
-          return;
-        }
-
-        let resp = await call_rpc(conn.conn, {
-          keymap: { moveLayer: { startIndex, destIndex } },
-        });
-
-        if (resp.keymap?.moveLayer?.ok) {
-          setKeymap(resp.keymap?.moveLayer?.ok);
-          setSelectedLayerIndex(destIndex);
-        } else {
-          console.error("Error moving", resp);
-        }
-      };
-
-      undoRedo?.(async () => {
-        await doMove(start, end);
-        return () => doMove(end, start);
-      });
-    },
-    [undoRedo]
-  );
-
-  const addLayer = useCallback(() => {
-    async function doAdd(): Promise<number> {
-      if (!conn.conn || !keymap) {
-        throw new Error("Not connected");
-      }
-
-      const resp = await call_rpc(conn.conn, { keymap: { addLayer: {} } });
-
-      if (resp.keymap?.addLayer?.ok) {
-        const newSelection = keymap.layers.length;
-        setKeymap(
-          produce((draft: any) => {
-            draft.layers.push(resp.keymap!.addLayer!.ok!.layer);
-            draft.availableLayers--;
-          })
-        );
-
-        setSelectedLayerIndex(newSelection);
-
-        return resp.keymap.addLayer.ok.index;
-      } else {
-        console.error("Add error", resp.keymap?.addLayer?.err);
-        throw new Error("Failed to add layer:" + resp.keymap?.addLayer?.err);
-      }
-    }
-
-    async function doRemove(layerIndex: number) {
-      if (!conn.conn) {
-        throw new Error("Not connected");
-      }
-
-      const resp = await call_rpc(conn.conn, {
-        keymap: { removeLayer: { layerIndex } },
-      });
-
-      console.log(resp);
-      if (resp.keymap?.removeLayer?.ok) {
-        setKeymap(
-          produce((draft: any) => {
-            draft.layers.splice(layerIndex, 1);
-            draft.availableLayers++;
-          })
-        );
-      } else {
-        console.error("Remove error", resp.keymap?.removeLayer?.err);
-        throw new Error(
-          "Failed to remove layer:" + resp.keymap?.removeLayer?.err
-        );
-      }
-    }
-
-    undoRedo?.(async () => {
-      let index = await doAdd();
-      return () => doRemove(index);
-    });
-  }, [conn, undoRedo, keymap]);
-
-  const removeLayer = useCallback(() => {
-    async function doRemove(layerIndex: number): Promise<void> {
-      if (!conn.conn || !keymap) {
-        throw new Error("Not connected");
-      }
-
-      const resp = await call_rpc(conn.conn, {
-        keymap: { removeLayer: { layerIndex } },
-      });
-
-      if (resp.keymap?.removeLayer?.ok) {
-        if (layerIndex == keymap.layers.length - 1) {
-          setSelectedLayerIndex(layerIndex - 1);
-        }
-        setKeymap(
-          produce((draft: any) => {
-            draft.layers.splice(layerIndex, 1);
-            draft.availableLayers++;
-          })
-        );
-      } else {
-        console.error("Remove error", resp.keymap?.removeLayer?.err);
-        throw new Error(
-          "Failed to remove layer:" + resp.keymap?.removeLayer?.err
-        );
-      }
-    }
-
-    async function doRestore(layerId: number, atIndex: number) {
-      if (!conn.conn) {
-        throw new Error("Not connected");
-      }
-
-      const resp = await call_rpc(conn.conn, {
-        keymap: { restoreLayer: { layerId, atIndex } },
-      });
-
-      console.log(resp);
-      if (resp.keymap?.restoreLayer?.ok) {
-        setKeymap(
-          produce((draft: any) => {
-            draft.layers.splice(atIndex, 0, resp!.keymap!.restoreLayer!.ok);
-            draft.availableLayers--;
-          })
-        );
-        setSelectedLayerIndex(atIndex);
-      } else {
-        console.error("Remove error", resp.keymap?.restoreLayer?.err);
-        throw new Error(
-          "Failed to restore layer:" + resp.keymap?.restoreLayer?.err
-        );
-      }
-    }
-
-    if (!keymap) {
-      throw new Error("No keymap loaded");
-    }
-
-    let index = selectedLayerIndex;
-    let layerId = keymap.layers[index].id;
-    undoRedo?.(async () => {
-      await doRemove(index);
-      return () => doRestore(layerId, index);
-    });
-  }, [conn, undoRedo, selectedLayerIndex]);
-
-  const changeLayerName = useCallback(
-    (id: number, oldName: string, newName: string) => {
-      async function changeName(layerId: number, name: string) {
-        if (!conn.conn) {
-          throw new Error("Not connected");
-        }
-
-        const resp = await call_rpc(conn.conn, {
-          keymap: { setLayerProps: { layerId, name } },
-        });
-
-        if (
-          resp.keymap?.setLayerProps ==
-          SetLayerPropsResponse.SET_LAYER_PROPS_RESP_OK
-        ) {
-          setKeymap(
-            produce((draft: any) => {
-              const layer_index = draft.layers.findIndex(
-                (l: Layer) => l.id == layerId
-              );
-              draft.layers[layer_index].name = name;
-            })
-          );
-        } else {
-          throw new Error(
-            "Failed to change layer name:" + resp.keymap?.setLayerProps
-          );
-        }
-      }
-
-      undoRedo?.(async () => {
-        await changeName(id, newName);
-        return async () => {
-          await changeName(id, oldName);
-        };
-      });
-    },
-    [conn, undoRedo, keymap]
-  );
+  const selectedBinding =
+    keymap && selectedKeyPosition !== undefined
+      ? keymap.layers[selectedLayerIndex]?.bindings[selectedKeyPosition]
+      : undefined;
 
   useEffect(() => {
     if (!keymap?.layers) return;
@@ -501,9 +336,9 @@ export default function Keyboard() {
   }, [keymap, selectedLayerIndex]);
 
   return (
-    <div className="grid grid-cols-[auto_1fr] grid-rows-[1fr_minmax(10em,auto)] bg-base-300 max-w-full min-w-0 min-h-0">
-      <div className="p-2 flex flex-col gap-2 bg-base-200 row-span-2">
-        {layouts && (
+    <div className="grid grid-cols-[auto_1fr] grid-rows-[1fr] bg-base-300 max-w-full min-w-0 min-h-0">
+      <div className="p-2 flex flex-col gap-2 bg-base-200">
+        {layouts && layouts.length > 1 && (
           <div className="col-start-3 row-start-1 row-end-2">
             <PhysicalLayoutPicker
               layouts={layouts}
@@ -516,60 +351,119 @@ export default function Keyboard() {
         {keymap && (
           <div className="col-start-1 row-start-1 row-end-2">
             <LayerPicker
-              layers={keymap.layers}
+              layers={keymap.layers.slice(0, 12)}
               selectedLayerIndex={selectedLayerIndex}
               onLayerClicked={setSelectedLayerIndex}
-              onLayerMoved={moveLayer}
-              canAdd={(keymap.availableLayers || 0) > 0}
-              canRemove={(keymap.layers?.length || 0) > 1}
-              onAddClicked={addLayer}
-              onRemoveClicked={removeLayer}
-              onLayerNameChanged={changeLayerName}
             />
           </div>
         )}
       </div>
       {layouts && keymap && behaviors && (
-        <div className="p-2 col-start-2 row-start-1 grid items-center justify-center relative min-w-0">
-          <KeymapComp
-            keymap={keymap}
-            layout={layouts[selectedPhysicalLayoutIndex]}
-            behaviors={behaviors}
-            scale={keymapScale}
-            selectedLayerIndex={selectedLayerIndex}
-            selectedKeyPosition={selectedKeyPosition}
-            onKeyPositionClicked={setSelectedKeyPosition}
-          />
-          <select
-            className="absolute top-2 right-2 h-8 rounded px-2"
-            value={keymapScale}
-            onChange={(e) => {
-              const value = deserializeLayoutZoom(e.target.value);
-              setKeymapScale(value);
-            }}
-          >
-            <option value="auto">Auto</option>
-            <option value={0.25}>25%</option>
-            <option value={0.5}>50%</option>
-            <option value={0.75}>75%</option>
-            <option value={1}>100%</option>
-            <option value={1.25}>125%</option>
-            <option value={1.5}>150%</option>
-            <option value={2}>200%</option>
-          </select>
+        <div className="nape-stage p-2 col-start-2 row-start-1 relative min-w-0">
+          <div className="nape-workbench">
+            <SlotPalette
+              behaviors={Object.values(behaviors)}
+              layers={keymap.layers.map(({ id, name }, li) => ({ id, name: name || li.toLocaleString() }))}
+            />
+            <div
+              className="nape-keymap-viewport"
+              onPointerDown={(event) => {
+                if ((event.target as HTMLElement).closest("button, input, select, textarea, summary")) return;
+                event.currentTarget.setPointerCapture(event.pointerId);
+                panGesture.current = {
+                  pointerId: event.pointerId,
+                  startX: event.clientX,
+                  startY: event.clientY,
+                  originX: canvasPan.x,
+                  originY: canvasPan.y,
+                };
+                event.currentTarget.classList.add("is-panning");
+              }}
+              onPointerMove={(event) => {
+                const gesture = panGesture.current;
+                if (!gesture || gesture.pointerId !== event.pointerId) return;
+                setCanvasPan({
+                  x: gesture.originX + event.clientX - gesture.startX,
+                  y: gesture.originY + event.clientY - gesture.startY,
+                });
+              }}
+              onPointerUp={(event) => {
+                if (panGesture.current?.pointerId !== event.pointerId) return;
+                panGesture.current = undefined;
+                event.currentTarget.classList.remove("is-panning");
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }}
+            >
+              <div
+                className="nape-keymap-canvas"
+                style={{
+                  transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${typeof keymapScale === "number" ? keymapScale : 1})`,
+                }}
+              >
+                <div className="nape-keymap-rotation">
+                  <KeymapComp
+                    keymap={keymap}
+                    behaviors={behaviors}
+                    selectedLayerIndex={selectedLayerIndex}
+                    rotationDegrees={selectedLayerIndex >= 0 && selectedLayerIndex <= 7 ? selectedLayerIndex * 45 : 0}
+                    selectedKeyPosition={selectedKeyPosition}
+                    keyLabels={Object.fromEntries(
+                      Object.entries(keyLabels)
+                        .filter(([key]) => key.startsWith(`${selectedLayerIndex}:`))
+                        .map(([key, label]) => [Number(key.split(":")[1]), label])
+                    )}
+                    onKeyPositionClicked={setSelectedKeyPosition}
+                    onBindingDropped={(keyPosition, binding, label) => doApplyBinding(binding, keyPosition, label)}
+                  />
+                </div>
+              </div>
+              <div className="nape-canvas-controls" aria-label="Canvas zoom">
+                <button
+                  type="button"
+                  aria-label="Zoom out"
+                  onClick={() => setKeymapScale(Math.max(0.5, (typeof keymapScale === "number" ? keymapScale : 1) - 0.1))}
+                >−</button>
+                <button
+                  type="button"
+                  className="nape-canvas-zoom-value"
+                  onClick={() => { setKeymapScale(1); setCanvasPan({ x: 0, y: 0 }); }}
+                  aria-label="Reset zoom and position"
+                >{Math.round((typeof keymapScale === "number" ? keymapScale : 1) * 100)}%</button>
+                <button
+                  type="button"
+                  aria-label="Zoom in"
+                  onClick={() => setKeymapScale(Math.min(2, (typeof keymapScale === "number" ? keymapScale : 1) + 0.1))}
+                >+</button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
-      {keymap && selectedBinding && (
-        <div className="p-2 col-start-2 row-start-2 bg-base-200">
-          <BehaviorBindingPicker
-            binding={selectedBinding}
-            behaviors={Object.values(behaviors)}
-            layers={keymap.layers.map(({ id, name }, li) => ({
-              id,
-              name: name || li.toLocaleString(),
-            }))}
-            onBindingChanged={doUpdateBinding}
-          />
+      {keymap && selectedBinding && selectedKeyPosition !== undefined && (
+        <div className="nape-slot-modal-backdrop" onMouseDown={() => setSelectedKeyPosition(undefined)}>
+          <div
+            className="nape-slot-editor"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Edit key ${selectedKeyPosition + 1}`}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span>Edit key</span>
+                <h2>Key {selectedKeyPosition + 1}</h2>
+              </div>
+              <button type="button" onClick={() => setSelectedKeyPosition(undefined)} aria-label="Close editor">×</button>
+            </header>
+            <div className="nape-slot-editor-body">
+              <BehaviorBindingPicker
+                binding={selectedBinding}
+                behaviors={[...Object.values(behaviors)]}
+                layers={keymap.layers.map(({ id, name }, li) => ({ id, name: name || li.toLocaleString() }))}
+                onBindingChanged={(binding) => doApplyBinding(binding, selectedKeyPosition, undefined, true)}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
