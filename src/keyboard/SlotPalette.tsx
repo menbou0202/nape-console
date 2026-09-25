@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GetBehaviorDetailsResponse } from "@zmkfirmware/zmk-studio-ts-client/behaviors";
 import type { BehaviorBinding } from "@zmkfirmware/zmk-studio-ts-client/keymap";
 
 import { BehaviorBindingPicker } from "../behaviors/BehaviorBindingPicker";
 
 export const NAPE_BINDING_MIME = "application/x-nape-binding";
+const USER_SLOTS_STORAGE_KEY = "nape-console:user-slots:v1";
 
 type SlotCategory = "user" | "mouse" | "bluetooth" | "shortcuts" | "layers";
 
@@ -13,6 +14,14 @@ export interface BindingSlot {
   label: string;
   category: SlotCategory;
   binding: BehaviorBinding;
+}
+
+interface StoredUserSlot {
+  id: string;
+  label: string;
+  behaviorName: string;
+  param1: number;
+  param2: number;
 }
 
 const CATEGORY_LABELS: Record<SlotCategory, string> = {
@@ -97,6 +106,64 @@ export function inferBindingLabel(
     : behavior.displayName;
 }
 
+function loadUserSlots(behaviors: GetBehaviorDetailsResponse[]): BindingSlot[] {
+  try {
+    const stored = localStorage.getItem(USER_SLOTS_STORAGE_KEY);
+    if (!stored) return [];
+    const parsed: unknown = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.flatMap((candidate): BindingSlot[] => {
+      if (
+        typeof candidate !== "object" || candidate === null ||
+        !("id" in candidate) || typeof candidate.id !== "string" ||
+        !("label" in candidate) || typeof candidate.label !== "string" ||
+        !("behaviorName" in candidate) || typeof candidate.behaviorName !== "string" ||
+        !("param1" in candidate) || typeof candidate.param1 !== "number" ||
+        !("param2" in candidate) || typeof candidate.param2 !== "number"
+      ) return [];
+
+      const behavior = behaviors.find(({ displayName }) => displayName === candidate.behaviorName);
+      if (!behavior) return [];
+
+      return [{
+        id: candidate.id,
+        label: candidate.label,
+        category: "user",
+        binding: {
+          behaviorId: behavior.id,
+          param1: candidate.param1,
+          param2: candidate.param2,
+        },
+      }];
+    });
+  } catch (error) {
+    console.error("Failed to load Nape user slots", error);
+    return [];
+  }
+}
+
+function saveUserSlots(slots: BindingSlot[], behaviors: GetBehaviorDetailsResponse[]) {
+  try {
+    const stored: StoredUserSlot[] = slots
+      .filter(({ category }) => category === "user")
+      .flatMap((slot): StoredUserSlot[] => {
+        const behaviorName = behaviors.find(({ id }) => id === slot.binding.behaviorId)?.displayName;
+        if (!behaviorName) return [];
+        return [{
+          id: slot.id,
+          label: slot.label,
+          behaviorName,
+          param1: slot.binding.param1,
+          param2: slot.binding.param2,
+        }];
+      });
+    localStorage.setItem(USER_SLOTS_STORAGE_KEY, JSON.stringify(stored));
+  } catch (error) {
+    console.error("Failed to save Nape user slots", error);
+  }
+}
+
 export interface SlotPaletteProps {
   behaviors: GetBehaviorDetailsResponse[];
   layers: { id: number; name: string }[];
@@ -106,10 +173,24 @@ export function SlotPalette({ behaviors, layers }: SlotPaletteProps) {
   const defaults = useMemo(() => createDefaultSlots(behaviors), [behaviors]);
   const [slots, setSlots] = useState<BindingSlot[]>([]);
   const [editingId, setEditingId] = useState<string>();
+  const initialized = useRef(false);
+  const skipNextSave = useRef(false);
 
   useEffect(() => {
-    if (slots.length === 0 && defaults.length > 0) setSlots(defaults);
-  }, [defaults, slots.length]);
+    if (initialized.current || defaults.length === 0) return;
+    setSlots([...loadUserSlots(behaviors), ...defaults]);
+    skipNextSave.current = true;
+    initialized.current = true;
+  }, [behaviors, defaults]);
+
+  useEffect(() => {
+    if (!initialized.current) return;
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
+    saveUserSlots(slots, behaviors);
+  }, [behaviors, slots]);
 
   const editingSlot = slots.find(({ id }) => id === editingId);
   const categories = (["user", "mouse", "bluetooth", "shortcuts", "layers"] as SlotCategory[])

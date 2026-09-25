@@ -190,8 +190,8 @@ export const Keymap = ({
   return (
     <div className="nape-pro-layout">
       {renderDiagram("front", napeWireframe, [
-        { position: 2, anchor: [50, 17.5] },
-        { position: 1, anchor: [50, 29.4] },
+        { position: 2, anchor: [50, 12.32] },
+        { position: 1, anchor: [50, 26.49] },
         { position: 0, anchor: [50, 72.6] },
       ])}
       {renderDiagram("back", napeBackWireframe, [
