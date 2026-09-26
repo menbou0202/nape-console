@@ -180,7 +180,9 @@ export const LayerPicker = ({
         {onRemoveClicked && (
           <button
             type="button"
-            className="hover:text-primary-content hover:bg-primary rounded-sm"
+            aria-label="Delete selected user layer"
+            title="Delete selected user layer (layers 12 and above)"
+            className="hover:text-primary-content hover:bg-primary rounded-sm disabled:text-gray-500 disabled:hover:bg-base-300 disabled:cursor-not-allowed"
             disabled={!canRemove}
             onClick={onRemoveClicked}
           >
@@ -190,6 +192,7 @@ export const LayerPicker = ({
         {onAddClicked && (
           <button
             type="button"
+            aria-label="Add layer"
             disabled={!canAdd}
             className="hover:text-primary-content ml-1 hover:bg-primary rounded-sm disabled:text-gray-500 disabled:hover:bg-base-300 disabled:cursor-not-allowed"
             onClick={onAddClicked}

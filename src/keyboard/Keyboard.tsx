@@ -182,6 +182,7 @@ export default function Keyboard() {
 
   const [selectedLayerIndex, setSelectedLayerIndex] = useState<number>(0);
   const [addingLayer, setAddingLayer] = useState(false);
+  const [removingLayer, setRemovingLayer] = useState(false);
   const [layerError, setLayerError] = useState<string>();
   const [selectedKeyPosition, setSelectedKeyPosition] = useState<
     number | undefined
@@ -229,6 +230,36 @@ export default function Keyboard() {
       setAddingLayer(false);
     }
   }, [conn.conn, keymap, addingLayer, setKeymap]);
+
+  const removeLayer = useCallback(async () => {
+    const layer = keymap?.layers[selectedLayerIndex];
+    // The first twelve layers are part of Nape's firmware layout, not user layers.
+    if (!conn.conn || !layer || layer.id < 12 || selectedLayerIndex < 12 || addingLayer || removingLayer) return;
+    if (layer.id === runtime.settings?.bootLayerId) {
+      setLayerError("Choose another startup layer before deleting this layer.");
+      return;
+    }
+    if (!window.confirm(`Delete layer ${selectedLayerIndex}${layer.name ? ` (${layer.name})` : ""}? Its key assignments will no longer be available. Save afterward to keep the change.`)) return;
+    setRemovingLayer(true);
+    setLayerError(undefined);
+    try {
+      const response = await call_rpc(conn.conn, { keymap: { removeLayer: { layerIndex: selectedLayerIndex } } });
+      if (!response.keymap?.removeLayer?.ok) {
+        setLayerError("Could not delete this layer from the device.");
+        return;
+      }
+      setKeymap((current) => current && produce(current, (draft) => {
+        draft.layers.splice(selectedLayerIndex, 1);
+        draft.availableLayers += 1;
+      }));
+      setSelectedLayerIndex(Math.max(0, selectedLayerIndex - 1));
+    } catch (error) {
+      console.error("Failed to delete layer", error);
+      setLayerError("Could not delete this layer from the device.");
+    } finally {
+      setRemovingLayer(false);
+    }
+  }, [conn.conn, keymap, selectedLayerIndex, addingLayer, removingLayer, runtime.settings?.bootLayerId, setKeymap]);
 
   useEffect(() => {
     setSelectedLayerIndex(0);
@@ -372,8 +403,10 @@ export default function Keyboard() {
               bootLayerId={runtime.settings?.bootLayerId}
               bootLayerBusy={runtime.busy}
               onBootLayerClicked={runtime.settings ? (id) => void runtime.change((current) => ({ ...current, bootLayerId: id })) : undefined}
-              canAdd={!addingLayer}
+              canAdd={!addingLayer && !removingLayer}
               onAddClicked={addLayer}
+              canRemove={!addingLayer && !removingLayer && selectedLayerIndex >= 12 && (keymap.layers[selectedLayerIndex]?.id ?? -1) >= 12}
+              onRemoveClicked={removeLayer}
             />
             {keymap.availableLayers <= 0 && <p className="max-w-40 text-xs text-muted">0 free layers on this firmware</p>}
             {layerError && <p role="alert" className="max-w-40 text-xs text-error">{layerError}</p>}

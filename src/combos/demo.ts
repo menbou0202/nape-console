@@ -73,6 +73,13 @@ export function createDemoConnection(): RpcConnection {
             const added = { id: index, name: "", bindings: Array.from({ length: 6 }, () => binding(6)) };
             keymap.layers.push(added); keymap.availableLayers--;
             response.keymap = { addLayer: { ok: { index, layer: added } } };
+          } else if (req.removeLayer) {
+            const index = req.removeLayer.layerIndex;
+            if (index < 12 || index >= keymap.layers.length) response.keymap = { removeLayer: { err: 2 } };
+            else {
+              keymap.layers.splice(index, 1); keymap.availableLayers++;
+              response.keymap = { removeLayer: { ok: {} } };
+            }
           }
         }
         replies.enqueue(structuredClone(response));
