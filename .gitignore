@@ -25,3 +25,6 @@ src/data
 *.sw?
 
 *storybook.log
+
+# Personal planning notes
+/todo.md

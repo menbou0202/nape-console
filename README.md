@@ -28,8 +28,6 @@ ZMK StudioのUSB RPCを基に、以下を実装しています。
 - Hold-Tapのタイミングなど、ランタイム設定の保存・復元
 - Comboの追加・編集・削除
 
-今後の作業は[todo.md](todo.md)にまとめています。
-
 ## 開発
 
 ```sh
