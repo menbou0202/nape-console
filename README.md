@@ -4,6 +4,8 @@ Napeのキーマップを、ファームウェアを書き直さずに変更す�
 
 [Nape Consoleを開く](https://menbou0202.github.io/nape-console/)（デスクトップ版Chrome／Edge）
 
+はじめて使う方は、[キーマップ変更ガイド](HOW_TO_USE.md)をご覧ください。
+
 ## 使い始める
 
 1. [`zmk-config-nape`の`console-beta`ブランチ](https://github.com/menbou0202/zmk-config-nape/tree/console-beta)でビルドされた`nape-console.uf2`をNapeに書き込みます。現時点では[成功したActions実行](https://github.com/menbou0202/zmk-config-nape/actions/runs/36231883233)の`firmware`成果物から入手できます。βリリースが公開された後は、そちらの添付ファイルを利用できます。
