@@ -5,6 +5,7 @@ export interface ParameterValuePickerProps {
   value?: number;
   values: BehaviorParameterValueDescription[];
   layers: { id: number; name: string }[];
+  roleLabel?: string;
   onValueChanged: (value?: number) => void;
 }
 
@@ -12,13 +13,15 @@ export const ParameterValuePicker = ({
   value,
   values,
   layers,
+  roleLabel,
   onValueChanged,
 }: ParameterValuePickerProps) => {
   if (values.length == 0) {
     return <></>;
   } else if (values.every((v) => v.constant !== undefined)) {
     return (
-      <div>
+      <div className="nape-parameter-row">
+        <label className="nape-parameter-label">{roleLabel || values[0]?.name || "Action"}</label>
         <select
           value={value}
           className="h-8 rounded"
@@ -33,8 +36,8 @@ export const ParameterValuePicker = ({
   } else if (values.length == 1) {
     if (values[0].range) {
       return (
-        <div>
-          <label>{values[0].name}: </label>
+        <div className="nape-parameter-row">
+          <label className="nape-parameter-label">{roleLabel || values[0].name}</label>
           <input
             type="number"
             min={values[0].range.min}
@@ -48,7 +51,7 @@ export const ParameterValuePicker = ({
       return (
         <HidUsagePicker
           onValueChanged={onValueChanged}
-          label={values[0].name}
+          label={roleLabel || values[0].name}
           value={value}
           usagePages={[
             { id: 7, min: 4, max: values[0].hidUsage.keyboardMax },
@@ -58,8 +61,8 @@ export const ParameterValuePicker = ({
       );
     } else if (values[0].layerId) {
       return (
-        <div>
-          <label>{values[0].name}: </label>
+        <div className="nape-parameter-row">
+          <label className="nape-parameter-label">{roleLabel || values[0].name}</label>
           <select
             value={value}
             className="h-8 rounded"

@@ -17,7 +17,7 @@ import {
   hid_usage_from_page_and_id,
   hid_usage_page_get_ids,
 } from "../hid-usages";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 export interface HidUsagePage {
@@ -115,6 +115,15 @@ export const HidUsagePicker = ({
   usagePages,
   onValueChanged,
 }: HidUsagePickerProps) => {
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const [dialogContainer, setDialogContainer] = useState<Element>();
+
+  // A popover portalled to document.body sits behind a native showModal()
+  // dialog and cannot be clicked. Keep it in that dialog's top layer.
+  useEffect(() => {
+    setDialogContainer(pickerRef.current?.closest("dialog") ?? undefined);
+  }, []);
+
   const mods = useMemo(() => {
     let flags = value ? value >> 24 : 0;
 
@@ -148,20 +157,20 @@ export const HidUsagePicker = ({
   );
 
   return (
-    <div className="flex gap-2 relative">
-      {label && <Label id="hid-usage-picker">{label}:</Label>}
+    <div ref={pickerRef} className="nape-hid-picker">
+      {label && <Label className="nape-parameter-label">{label}</Label>}
       <ComboBox
         selectedKey={value ? mask_mods(value) : null}
         onSelectionChange={selectionChanged}
-        aria-labelledby="hid-usage-picker"
+        aria-label={label || "Key"}
       >
-        <div className="flex">
-          <Input className="p-1 rounded-l" />
-          <Button className="rounded-r bg-primary text-primary-content w-8 h-8 flex justify-center items-center">
+        <div className="nape-hid-combobox">
+          <Input className="nape-hid-input" />
+          <Button className="nape-hid-trigger bg-primary text-primary-content flex justify-center items-center">
             <ChevronDown className="size-4" />
           </Button>
         </div>
-        <Popover className="w-[var(--trigger-width)] max-h-4 shadow-md text-base-content rounded border-base-content bg-base-100">
+        <Popover UNSTABLE_portalContainer={dialogContainer} className="w-[var(--trigger-width)] shadow-md text-base-content rounded border-base-content bg-base-100">
           <ListBox
             items={usagePages}
             className="block max-h-[30vh] min-h-[unset] overflow-auto p-2"
@@ -173,7 +182,7 @@ export const HidUsagePicker = ({
       </ComboBox>
       <CheckboxGroup
         aria-label="Implicit Modifiers"
-        className="grid grid-flow-col gap-x-px auto-cols-[minmax(min-content,1fr)] content-stretch divide-x rounded-md"
+        className="nape-hid-modifiers"
         value={mods}
         onChange={modifiersChanged}
       >
@@ -181,7 +190,7 @@ export const HidUsagePicker = ({
           <Checkbox
             key={m}
             value={m.toLocaleString()}
-            className="text-nowrap cursor-pointer grid px-2 content-center justify-center rac-selected:bg-primary border-base-100 bg-base-300 hover:bg-base-100 first:rounded-s-md last:rounded-e-md rac-selected:text-primary-content"
+            className="nape-hid-modifier rac-selected:bg-primary bg-base-300 hover:bg-base-100 rac-selected:text-primary-content"
           >
             {mod_labels[m]}
           </Checkbox>

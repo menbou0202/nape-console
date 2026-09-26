@@ -1,4 +1,4 @@
-import { Pencil, Minus, Plus } from "lucide-react";
+import { House, Pencil, Minus, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
   DropIndicator,
@@ -26,6 +26,9 @@ interface LayerPickerProps {
   canRemove?: boolean;
 
   onLayerClicked?: LayerClickCallback;
+  bootLayerId?: number;
+  onBootLayerClicked?: (id: number) => void;
+  bootLayerBusy?: boolean;
   onLayerMoved?: LayerMovedCallback;
   onAddClicked?: () => void | Promise<void>;
   onRemoveClicked?: () => void | Promise<void>;
@@ -108,6 +111,9 @@ export const LayerPicker = ({
   canAdd,
   canRemove,
   onLayerClicked,
+  bootLayerId,
+  onBootLayerClicked,
+  bootLayerBusy,
   onLayerMoved,
   onAddClicked,
   onRemoveClicked,
@@ -124,8 +130,10 @@ export const LayerPicker = ({
       id: l.id,
       index: i,
       selected: i === selectedLayerIndex,
+      isBoot: l.id === bootLayerId,
+      bootBusy: bootLayerBusy,
     }));
-  }, [layers, selectedLayerIndex]);
+  }, [layers, selectedLayerIndex, bootLayerId, bootLayerBusy]);
 
   const selectionChanged = useCallback(
     (s: Selection) => {
@@ -138,7 +146,7 @@ export const LayerPicker = ({
     [onLayerClicked, layer_items]
   );
 
-  let { dragAndDropHooks } = useDragAndDrop({
+  const { dragAndDropHooks } = useDragAndDrop({
     renderDropIndicator(target) {
       return (
         <DropIndicator
@@ -150,8 +158,8 @@ export const LayerPicker = ({
     getItems: (keys) =>
       [...keys].map((key) => ({ "text/plain": key.toLocaleString() })),
     onReorder(e) {
-      let startIndex = layer_items.findIndex((l) => e.keys.has(l.id));
-      let endIndex = layer_items.findIndex((l) => l.id === e.target.key);
+      const startIndex = layer_items.findIndex((l) => e.keys.has(l.id));
+      const endIndex = layer_items.findIndex((l) => l.id === e.target.key);
       onLayerMoved?.(startIndex, endIndex);
     },
   });
@@ -222,6 +230,18 @@ export const LayerPicker = ({
               <span className="text-xs tabular-nums opacity-60">{layer_item.index}</span>
               <span>{layer_item.name}</span>
             </span>
+            {onBootLayerClicked && layer_item.index < 8 && <button
+              type="button"
+              className={`nape-boot-control ${layer_item.isBoot ? "is-boot" : ""}`}
+              aria-label={layer_item.isBoot
+                ? `${layer_item.name} is the next startup layer`
+                : `Set ${layer_item.name} as next startup layer`}
+              aria-pressed={layer_item.isBoot}
+              title={layer_item.isBoot ? "Next startup layer" : "Set as next startup layer"}
+              disabled={layer_item.bootBusy || layer_item.isBoot}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => { event.stopPropagation(); onBootLayerClicked(layer_item.id); }}
+            ><House size={15} fill={layer_item.isBoot ? "#fff" : "none"} /></button>}
             {onLayerNameChanged && (
               <Pencil
                 className="h-4 w-4 mx-1 invisible group-hover:visible"

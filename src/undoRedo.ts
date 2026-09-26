@@ -29,13 +29,13 @@ export function useUndoRedo(): [
 
   const doIt = async (doCb: DoCallback, preserveRedo?: boolean) => {
     setLocked(true);
-    let undo = await doCb();
-
-    setUndoStack([[doCb, undo], ...undoStack]);
-    if (!preserveRedo) {
-      setRedoStack([]);
+    try {
+      let undo = await doCb();
+      setUndoStack([[doCb, undo], ...undoStack]);
+      if (!preserveRedo) setRedoStack([]);
+    } finally {
+      setLocked(false);
     }
-    setLocked(false);
   };
 
   const undo = async () => {
@@ -49,12 +49,13 @@ export function useUndoRedo(): [
 
     setLocked(true);
     let [doCb, undoCb] = undoStack[0];
-    setUndoStack(undoStack.slice(1));
-    setRedoStack([doCb, ...redoStack]);
-
-    await undoCb();
-
-    setLocked(false);
+    try {
+      await undoCb();
+      setUndoStack(undoStack.slice(1));
+      setRedoStack([doCb, ...redoStack]);
+    } finally {
+      setLocked(false);
+    }
   };
 
   const redo = async () => {
@@ -68,9 +69,8 @@ export function useUndoRedo(): [
 
     let doCb = redoStack[0];
 
+    await doIt(doCb, true);
     setRedoStack(redoStack.slice(1));
-
-    return await doIt(doCb, true);
   };
 
   const reset = () => {

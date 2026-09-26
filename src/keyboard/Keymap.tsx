@@ -1,10 +1,10 @@
 import { Keymap as KeymapMsg } from "@zmkfirmware/zmk-studio-ts-client/keymap";
 import type { GetBehaviorDetailsResponse } from "@zmkfirmware/zmk-studio-ts-client/behaviors";
 
-import { HidUsageLabel } from "./HidUsageLabel";
 import napeWireframe from "../../images/Nape.svg";
 import napeBackWireframe from "../../images/NapeBack.svg";
-import { inferBindingLabel, NAPE_BINDING_MIME } from "./SlotPalette";
+import { NAPE_BINDING_MIME } from "./SlotPalette";
+import { bindingDisplayLines } from "./bindingDisplay";
 
 type BehaviorMap = Record<number, GetBehaviorDetailsResponse>;
 
@@ -14,9 +14,8 @@ export interface KeymapProps {
   selectedLayerIndex: number;
   rotationDegrees: number;
   selectedKeyPosition: number | undefined;
-  keyLabels: Record<number, string>;
   onKeyPositionClicked: (keyPosition: number) => void;
-  onBindingDropped: (keyPosition: number, binding: { behaviorId: number; param1: number; param2: number }, label: string) => void;
+  onBindingDropped: (keyPosition: number, binding: { behaviorId: number; param1: number; param2: number }) => void;
 }
 
 export const Keymap = ({
@@ -25,7 +24,6 @@ export const Keymap = ({
   selectedLayerIndex,
   rotationDegrees,
   selectedKeyPosition,
-  keyLabels,
   onKeyPositionClicked,
   onBindingDropped,
 }: KeymapProps) => {
@@ -38,7 +36,7 @@ export const Keymap = ({
   const renderKey = (position: number, backNumber?: number) => {
     const binding = layer.bindings[position];
     const behavior = behaviors[binding?.behaviorId];
-    const slotLabel = keyLabels[position] || inferBindingLabel(binding, Object.values(behaviors));
+    const lines = bindingDisplayLines(binding, Object.values(behaviors), keymap.layers.map(({ id, name }, index) => ({ id, name: name || String(index) })));
 
     return (
       <button
@@ -54,10 +52,9 @@ export const Keymap = ({
         onDrop={(event) => {
           event.preventDefault();
           const rawBinding = event.dataTransfer.getData(NAPE_BINDING_MIME);
-          const slotLabel = event.dataTransfer.getData("text/plain");
           if (!rawBinding) return;
           try {
-            onBindingDropped(position, JSON.parse(rawBinding), slotLabel);
+            onBindingDropped(position, JSON.parse(rawBinding));
           } catch (error) {
             console.error("Invalid Nape slot binding", error);
           }
@@ -66,9 +63,7 @@ export const Keymap = ({
       >
         {backNumber && <span className="nape-pro-key-number">{backNumber}</span>}
         <span className="nape-pro-key-behavior">{behavior?.displayName || "Unknown"}</span>
-        <span className="nape-pro-key-value">
-          {slotLabel || (binding && <HidUsageLabel hid_usage={binding.param1} />)}
-        </span>
+        {lines.slice(1).map((line, index) => <span className="nape-pro-key-detail" key={index}>{line}</span>)}
       </button>
     );
   };

@@ -77,8 +77,7 @@ export const AppHeader = ({
         <h2 className="my-2 text-lg">Restore Stock Settings</h2>
         <div>
           <p>
-            Settings reset will remove any customizations previously made in ZMK
-            Studio and restore the stock keymap
+            Settings reset will remove saved keymap, combo, Hold-Tap, and trackball DPI customizations and restore firmware defaults.
           </p>
           <p>Continue?</p>
           <div className="flex justify-end my-2 gap-3">

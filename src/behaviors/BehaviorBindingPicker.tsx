@@ -13,6 +13,7 @@ export interface BehaviorBindingPickerProps {
   behaviors: GetBehaviorDetailsResponse[];
   layers: { id: number; name: string }[];
   onBindingChanged: (binding: BehaviorBinding) => void;
+  onValidityChanged?: (valid: boolean) => void;
 }
 
 function validateBinding(
@@ -44,6 +45,7 @@ export const BehaviorBindingPicker = ({
   layers,
   behaviors,
   onBindingChanged,
+  onValidityChanged,
 }: BehaviorBindingPickerProps) => {
   const [behaviorId, setBehaviorId] = useState(binding.behaviorId);
   const [param1, setParam1] = useState<number | undefined>(binding.param1);
@@ -58,6 +60,10 @@ export const BehaviorBindingPicker = ({
     () => behaviors.sort((a, b) => a.displayName.localeCompare(b.displayName)),
     [behaviors]
   );
+
+  useEffect(() => {
+    onValidityChanged?.(Boolean(metadata && validateBinding(metadata, layers.map((l) => l.id), param1, param2)));
+  }, [metadata, layers, param1, param2, onValidityChanged]);
 
   useEffect(() => {
     if (
@@ -121,6 +127,7 @@ export const BehaviorBindingPicker = ({
       {metadata && (
         <BehaviorParametersPicker
           metadata={metadata}
+          behaviorName={behaviors.find((behavior) => behavior.id === behaviorId)?.displayName}
           param1={param1}
           param2={param2}
           layers={layers}

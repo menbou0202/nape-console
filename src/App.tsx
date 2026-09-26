@@ -1,6 +1,7 @@
 import { AppHeader } from "./AppHeader";
+import { createDemoConnection } from "./combos/demo";
 
-import { create_rpc_connection } from "@zmkfirmware/zmk-studio-ts-client";
+import { create_rpc_connection } from "./rpc/napeConnection";
 import { call_rpc } from "./rpc/logging";
 
 import type { Notification } from "@zmkfirmware/zmk-studio-ts-client/studio";
@@ -161,10 +162,11 @@ async function connect(
 }
 
 function App() {
-  const [conn, setConn] = useState<ConnectionState>({ conn: null });
+  const demo = import.meta.env.DEV && new URLSearchParams(window.location.search).get("demo") === "combos";
+  const [conn, setConn] = useState<ConnectionState>(() => ({ conn: demo ? createDemoConnection() : null }));
   const [connectedDeviceName, setConnectedDeviceName] = useState<
     string | undefined
-  >(undefined);
+  >(demo ? "Demo only — no device connected" : undefined);
   const [doIt, undo, redo, canUndo, canRedo, reset] = useUndoRedo();
   const [showAbout, setShowAbout] = useState(false);
   const [showLicenseNotice, setShowLicenseNotice] = useState(false);
@@ -211,6 +213,7 @@ function App() {
       let resp = await call_rpc(conn.conn, { keymap: { saveChanges: true } });
       if (!resp.keymap?.saveChanges || resp.keymap?.saveChanges.err) {
         console.error("Failed to save changes", resp.keymap?.saveChanges);
+        window.alert("Changes could not be saved to the device. Keep the device connected and try again.");
       }
     }
 
@@ -228,6 +231,8 @@ function App() {
       });
       if (!resp.keymap?.discardChanges) {
         console.error("Failed to discard changes", resp);
+        window.alert("Could not discard changes. Release all Nape keys and try again.");
+        return;
       }
 
       reset();
@@ -248,6 +253,8 @@ function App() {
       });
       if (!resp.core?.resetSettings) {
         console.error("Failed to settings reset", resp);
+        window.alert("Could not restore stock settings. Release all Nape keys and try again.");
+        return;
       }
 
       reset();
@@ -300,8 +307,8 @@ function App() {
               connectedDeviceLabel={connectedDeviceName}
               canUndo={canUndo}
               canRedo={canRedo}
-              onUndo={undo}
-              onRedo={redo}
+              onUndo={() => undo().catch((error) => { window.alert(String(error)); })}
+              onRedo={() => redo().catch((error) => { window.alert(String(error)); })}
               onSave={save}
               onDiscard={discard}
               onDisconnect={disconnect}

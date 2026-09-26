@@ -21,6 +21,9 @@ import { LayerPicker } from "./LayerPicker";
 import { PhysicalLayoutPicker } from "./PhysicalLayoutPicker";
 import { Keymap as KeymapComp } from "./Keymap";
 import { SlotPalette } from "./SlotPalette";
+import { ComboPanel } from "../combos/ComboPanel";
+import { RuntimeSettingsButton } from "../runtime/RuntimeSettingsButton";
+import { useLayerRuntimeSettings } from "../runtime/useLayerRuntimeSettings";
 import { useConnectedDeviceData } from "../rpc/useConnectedDeviceData";
 import { ConnectionContext } from "../rpc/ConnectionContext";
 import { UndoRedoContext } from "../undoRedo";
@@ -178,11 +181,12 @@ export default function Keyboard() {
   });
 
   const [selectedLayerIndex, setSelectedLayerIndex] = useState<number>(0);
+  const [addingLayer, setAddingLayer] = useState(false);
+  const [layerError, setLayerError] = useState<string>();
   const [selectedKeyPosition, setSelectedKeyPosition] = useState<
     number | undefined
   >(undefined);
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
-  const [keyLabels, setKeyLabels] = useState<Record<string, string>>({});
   const panGesture = useRef<{
     pointerId: number;
     startX: number;
@@ -191,14 +195,44 @@ export default function Keyboard() {
     originY: number;
   }>();
   const behaviors = useBehaviors();
+  const runtime = useLayerRuntimeSettings();
 
   const conn = useContext(ConnectionContext);
   const undoRedo = useContext(UndoRedoContext);
 
+  const addLayer = useCallback(async () => {
+    if (!conn.conn || !keymap || addingLayer) return;
+    if (keymap.availableLayers <= 0) {
+      setLayerError("No free layer slots on this device. Flash the updated nape-studio.uf2 to add layers 12–19, then reconnect.");
+      return;
+    }
+    setAddingLayer(true);
+    setLayerError(undefined);
+    try {
+      const response = await call_rpc(conn.conn, { keymap: { addLayer: {} } });
+      const added = response.keymap?.addLayer?.ok;
+      if (!added?.layer) {
+        setLayerError(response.keymap?.addLayer?.err === 2
+          ? "No free layer slots on this firmware. Rebuild the Nape Studio firmware with reserved layers."
+          : "Could not add a layer to the device.");
+        return;
+      }
+      setKeymap((current) => current && produce(current, (draft) => {
+        draft.layers.splice(added.index, 0, added.layer!);
+        draft.availableLayers -= 1;
+      }));
+      setSelectedLayerIndex(added.index);
+    } catch (error) {
+      console.error("Failed to add layer", error);
+      setLayerError("Could not add a layer to the device.");
+    } finally {
+      setAddingLayer(false);
+    }
+  }, [conn.conn, keymap, addingLayer, setKeymap]);
+
   useEffect(() => {
     setSelectedLayerIndex(0);
     setSelectedKeyPosition(undefined);
-    setKeyLabels({});
   }, [conn]);
 
   useEffect(() => {
@@ -240,7 +274,7 @@ export default function Keyboard() {
   );
 
   let doApplyBinding = useCallback(
-    (binding: BehaviorBinding, keyPosition: number, slotLabel?: string, clearLabel = false) => {
+    (binding: BehaviorBinding, keyPosition: number) => {
       if (!keymap) {
         console.error(
           "Can't update binding without a loaded keymap"
@@ -251,8 +285,6 @@ export default function Keyboard() {
       const layer = selectedLayerIndex;
       const layerId = keymap.layers[layer].id;
       const oldBinding = keymap.layers[layer].bindings[keyPosition];
-      const labelKey = `${layer}:${keyPosition}`;
-      const oldLabel = keyLabels[labelKey];
       undoRedo?.(async () => {
         if (!conn.conn) {
           throw new Error("Not connected");
@@ -271,18 +303,6 @@ export default function Keyboard() {
               draft.layers[layer].bindings[keyPosition] = binding;
             })
           );
-          if (slotLabel) {
-            setKeyLabels((current) => ({
-              ...current,
-              [labelKey]: slotLabel,
-            }));
-          } else if (clearLabel) {
-            setKeyLabels((current) => {
-              const next = { ...current };
-              delete next[labelKey];
-              return next;
-            });
-          }
         } else {
           console.error("Failed to set binding", resp.keymap?.setLayerBinding);
         }
@@ -306,18 +326,12 @@ export default function Keyboard() {
                 draft.layers[layer].bindings[keyPosition] = oldBinding;
               })
             );
-            setKeyLabels((current) => {
-              const restored = { ...current };
-              if (oldLabel) restored[labelKey] = oldLabel;
-              else delete restored[labelKey];
-              return restored;
-            });
           } else {
           }
         };
       });
     },
-    [conn, keyLabels, keymap, undoRedo, selectedLayerIndex]
+    [conn, keymap, undoRedo, selectedLayerIndex]
   );
 
   const selectedBinding =
@@ -337,7 +351,8 @@ export default function Keyboard() {
 
   return (
     <div className="grid grid-cols-[auto_1fr] grid-rows-[1fr] bg-base-300 max-w-full min-w-0 min-h-0">
-      <div className="p-2 flex flex-col gap-2 bg-base-200">
+      <div className="nape-layer-sidebar bg-base-200">
+        <div className="nape-layer-scroll">
         {layouts && layouts.length > 1 && (
           <div className="col-start-3 row-start-1 row-end-2">
             <PhysicalLayoutPicker
@@ -351,12 +366,45 @@ export default function Keyboard() {
         {keymap && (
           <div className="col-start-1 row-start-1 row-end-2">
             <LayerPicker
-              layers={keymap.layers.slice(0, 12)}
+              layers={keymap.layers}
               selectedLayerIndex={selectedLayerIndex}
               onLayerClicked={setSelectedLayerIndex}
+              bootLayerId={runtime.settings?.bootLayerId}
+              bootLayerBusy={runtime.busy}
+              onBootLayerClicked={runtime.settings ? (id) => void runtime.change((current) => ({ ...current, bootLayerId: id })) : undefined}
+              canAdd={!addingLayer}
+              onAddClicked={addLayer}
             />
+            {keymap.availableLayers <= 0 && <p className="max-w-40 text-xs text-muted">0 free layers on this firmware</p>}
+            {layerError && <p role="alert" className="max-w-40 text-xs text-error">{layerError}</p>}
           </div>
         )}
+        </div>
+        {keymap && <div className="nape-layer-inspector">
+          <p className="nape-layer-inspector-title">Selected layer</p>
+          <p className="nape-layer-inspector-name">{keymap.layers[selectedLayerIndex]?.name || String(selectedLayerIndex)}</p>
+          <label htmlFor="nape-layer-dpi">Trackball DPI</label>
+          <select id="nape-layer-dpi"
+            disabled={!runtime.settings || runtime.busy || (keymap.layers[selectedLayerIndex]?.id ?? 32) >= 32}
+            value={runtime.settings?.layerCpi[keymap.layers[selectedLayerIndex]?.id ?? 32] ?? 0}
+            onChange={(event) => {
+              const id = keymap.layers[selectedLayerIndex]?.id;
+              if (id === undefined) return;
+              const cpi = Number(event.target.value);
+              void runtime.change((current) => ({ ...current,
+                layerCpi: current.layerCpi.map((value, index) => index === id ? cpi : value),
+              }));
+            }}>
+            <option value={0}>Use common ({runtime.settings?.cpi ?? 800} DPI)</option>
+            {Array.from({ length: 16 }, (_, i) => (i + 1) * 200).map((cpi) => <option key={cpi} value={cpi}>{cpi} DPI</option>)}
+          </select>
+          <p className="nape-layer-inspector-help">Takes effect when this layer is active.</p>
+        </div>}
+        {keymap && <div className="nape-global-settings">
+          {runtime.settings && <p className="nape-layer-inspector-boot">Next startup: {keymap.layers.find((layer) => layer.id === runtime.settings?.bootLayerId)?.name || "0°"}</p>}
+          {runtime.error && <p role="alert" className="nape-layer-inspector-error">{runtime.error}</p>}
+          <RuntimeSettingsButton behaviors={Object.values(behaviors)} />
+        </div>}
       </div>
       {layouts && keymap && behaviors && (
         <div className="nape-stage p-2 col-start-2 row-start-1 relative min-w-0">
@@ -365,6 +413,7 @@ export default function Keyboard() {
               behaviors={Object.values(behaviors)}
               layers={keymap.layers.map(({ id, name }, li) => ({ id, name: name || li.toLocaleString() }))}
             />
+            <ComboPanel behaviors={Object.values(behaviors)} layers={keymap.layers.map(({ id, name }, i) => ({ id, name: name || String(i) }))} />
             <div
               className="nape-keymap-viewport"
               onPointerDown={(event) => {
@@ -407,13 +456,8 @@ export default function Keyboard() {
                     selectedLayerIndex={selectedLayerIndex}
                     rotationDegrees={selectedLayerIndex >= 0 && selectedLayerIndex <= 7 ? selectedLayerIndex * 45 : 0}
                     selectedKeyPosition={selectedKeyPosition}
-                    keyLabels={Object.fromEntries(
-                      Object.entries(keyLabels)
-                        .filter(([key]) => key.startsWith(`${selectedLayerIndex}:`))
-                        .map(([key, label]) => [Number(key.split(":")[1]), label])
-                    )}
                     onKeyPositionClicked={setSelectedKeyPosition}
-                    onBindingDropped={(keyPosition, binding, label) => doApplyBinding(binding, keyPosition, label)}
+                    onBindingDropped={(keyPosition, binding) => doApplyBinding(binding, keyPosition)}
                   />
                 </div>
               </div>
@@ -460,7 +504,7 @@ export default function Keyboard() {
                 binding={selectedBinding}
                 behaviors={[...Object.values(behaviors)]}
                 layers={keymap.layers.map(({ id, name }, li) => ({ id, name: name || li.toLocaleString() }))}
-                onBindingChanged={(binding) => doApplyBinding(binding, selectedKeyPosition, undefined, true)}
+                onBindingChanged={(binding) => doApplyBinding(binding, selectedKeyPosition)}
               />
             </div>
           </div>

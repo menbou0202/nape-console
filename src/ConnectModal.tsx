@@ -227,31 +227,18 @@ function noTransportsOptionsPrompt() {
   return (
     <div className="m-4 flex flex-col gap-2">
       <p>
-        Your browser is not supported. ZMK Studio uses either{" "}
+        Your browser is not supported. Nape Console uses{" "}
         <ExternalLink href="https://caniuse.com/web-serial">
           Web Serial
         </ExternalLink>{" "}
-        or{" "}
-        <ExternalLink href="https://caniuse.com/web-bluetooth">
-          Web Bluetooth
-        </ExternalLink>{" "}
-        (Linux only) to connect to ZMK devices.
+        to connect to Nape over USB.
       </p>
 
       <div>
-        <p>To use ZMK Studio, either:</p>
+        <p>To use Nape Console:</p>
         <ul className="list-disc list-inside">
-          <li>
-            Use a browser that supports the above web technologies, e.g.
-            Chrome/Edge, or
-          </li>
-          <li>
-            Download our{" "}
-            <ExternalLink href="/download">
-              cross platform application
-            </ExternalLink>
-            .
-          </li>
+          <li>Open this page in Chrome or Edge on a desktop computer.</li>
+          <li>Connect a Nape with the Console-compatible firmware over USB.</li>
         </ul>
       </div>
     </div>
@@ -284,7 +271,7 @@ export const ConnectModal = ({
 
   return (
     <GenericModal ref={dialog} className="max-w-xl">
-      <h1 className="text-xl">Welcome to ZMK Studio</h1>
+      <h1 className="text-xl">Welcome to Nape Console</h1>
       {haveTransports
         ? connectOptions(transports, onTransportCreated, open)
         : noTransportsOptionsPrompt()}

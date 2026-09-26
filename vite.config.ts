@@ -4,6 +4,8 @@ import react from "@vitejs/plugin-react-swc";
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // Keep localhost at / while publishing the web-only beta as a Pages project site.
+  base: process.env.GITHUB_PAGES === "1" ? "/nape-console/" : "/",
   // prevent vite from obscuring rust errors
   clearScreen: false,
   // Tauri expects a fixed port, fail if that port is not available
@@ -27,12 +29,6 @@ export default defineConfig({
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     // produce sourcemaps for debug builds
     sourcemap: !!process.env.TAURI_DEBUG,
-    // include download page
-    rollupOptions: {
-      input: {
-        main: "./index.html",
-        download: "./download.html",
-      },
-    }
+    // The upstream desktop-app download page is not part of Nape Console beta.
   },
 });

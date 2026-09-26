@@ -3,6 +3,7 @@ import type { GetBehaviorDetailsResponse } from "@zmkfirmware/zmk-studio-ts-clie
 import type { BehaviorBinding } from "@zmkfirmware/zmk-studio-ts-client/keymap";
 
 import { BehaviorBindingPicker } from "../behaviors/BehaviorBindingPicker";
+import { bindingDisplayLines } from "./bindingDisplay";
 
 export const NAPE_BINDING_MIME = "application/x-nape-binding";
 const USER_SLOTS_STORAGE_KEY = "nape-console:user-slots:v1";
@@ -11,17 +12,20 @@ type SlotCategory = "user" | "mouse" | "bluetooth" | "shortcuts" | "layers";
 
 export interface BindingSlot {
   id: string;
-  label: string;
   category: SlotCategory;
   binding: BehaviorBinding;
 }
 
 interface StoredUserSlot {
   id: string;
-  label: string;
   behaviorName: string;
   param1: number;
   param2: number;
+}
+
+interface SlotDraft {
+  slot: BindingSlot;
+  isNew: boolean;
 }
 
 const CATEGORY_LABELS: Record<SlotCategory, string> = {
@@ -38,12 +42,11 @@ const V = KEYBOARD_USAGE | 0x19;
 const LEFT_CONTROL = 0x01 << 24;
 const LEFT_GUI = 0x08 << 24;
 
-export function createDefaultSlots(behaviors: GetBehaviorDetailsResponse[]): BindingSlot[] {
+export function createDefaultSlots(behaviors: GetBehaviorDetailsResponse[], layerCount = 12): BindingSlot[] {
   const behavior = (name: string) => behaviors.find((item) => item.displayName === name)?.id;
   const slots: BindingSlot[] = [];
   const add = (
     category: SlotCategory,
-    label: string,
     behaviorName: string,
     param1 = 0,
     param2 = 0,
@@ -51,59 +54,38 @@ export function createDefaultSlots(behaviors: GetBehaviorDetailsResponse[]): Bin
     const behaviorId = behavior(behaviorName);
     if (behaviorId === undefined) return;
     slots.push({
-      id: `${category}-${slots.length}-${label}`,
-      label,
+      id: `${category}-${behaviorName}-${param1}-${param2}`,
       category,
       binding: { behaviorId, param1, param2 },
     });
   };
 
-  add("mouse", "Left click", "Mouse Key Press", 1);
-  add("mouse", "Right click", "Mouse Key Press", 2);
-  add("mouse", "Middle click", "Mouse Key Press", 4);
-  add("mouse", "MB4", "Mouse Key Press", 8);
-  add("mouse", "MB5", "Mouse Key Press", 16);
-  add("mouse", "Scroll layer", "Momentary Layer", 10);
+  add("mouse", "Mouse Key Press", 1);
+  add("mouse", "Mouse Key Press", 2);
+  add("mouse", "Mouse Key Press", 4);
+  add("mouse", "Mouse Key Press", 8);
+  add("mouse", "Mouse Key Press", 16);
+  add("mouse", "Momentary Layer", 10);
 
   for (let profile = 0; profile < 5; profile += 1) {
-    add("bluetooth", `Select profile ${profile + 1}`, "Bluetooth", 3, profile);
+    add("bluetooth", "Bluetooth", 3, profile);
   }
-  add("bluetooth", "Clear selected profile", "Bluetooth", 0, 0);
-  add("bluetooth", "Clear all profiles", "Bluetooth", 4, 0);
+  add("bluetooth", "Bluetooth", 0, 0);
+  add("bluetooth", "Bluetooth", 4, 0);
 
-  add("shortcuts", "Copy (Mac)", "Key Press", LEFT_GUI | C);
-  add("shortcuts", "Copy (Win)", "Key Press", LEFT_CONTROL | C);
-  add("shortcuts", "Paste (Mac)", "Key Press", LEFT_GUI | V);
-  add("shortcuts", "Paste (Win)", "Key Press", LEFT_CONTROL | V);
+  add("shortcuts", "Key Press", LEFT_GUI | C);
+  add("shortcuts", "Key Press", LEFT_CONTROL | C);
+  add("shortcuts", "Key Press", LEFT_GUI | V);
+  add("shortcuts", "Key Press", LEFT_CONTROL | V);
 
-  add("layers", "MO11 · Orientation", "Momentary Layer", 11);
   for (let layer = 0; layer < 12; layer += 1) {
-    add("layers", `TO layer ${layer}`, "To Layer", layer);
+    add("layers", "Momentary Layer", layer);
+  }
+  for (let layer = 0; layer < layerCount; layer += 1) {
+    add("layers", "To Layer", layer);
   }
 
   return slots;
-}
-
-export function inferBindingLabel(
-  binding: BehaviorBinding | undefined,
-  behaviors: GetBehaviorDetailsResponse[],
-): string | undefined {
-  if (!binding) return undefined;
-
-  const matchingDefault = createDefaultSlots(behaviors).find((slot) =>
-    slot.binding.behaviorId === binding.behaviorId &&
-    slot.binding.param1 === binding.param1 &&
-    slot.binding.param2 === binding.param2
-  );
-  if (matchingDefault) return matchingDefault.label;
-
-  const behavior = behaviors.find(({ id }) => id === binding.behaviorId);
-  if (!behavior) return undefined;
-
-  const params = [binding.param1, binding.param2].filter((value) => value !== 0);
-  return params.length > 0
-    ? `${behavior.displayName} · ${params.join(" / ")}`
-    : behavior.displayName;
 }
 
 function loadUserSlots(behaviors: GetBehaviorDetailsResponse[]): BindingSlot[] {
@@ -117,7 +99,6 @@ function loadUserSlots(behaviors: GetBehaviorDetailsResponse[]): BindingSlot[] {
       if (
         typeof candidate !== "object" || candidate === null ||
         !("id" in candidate) || typeof candidate.id !== "string" ||
-        !("label" in candidate) || typeof candidate.label !== "string" ||
         !("behaviorName" in candidate) || typeof candidate.behaviorName !== "string" ||
         !("param1" in candidate) || typeof candidate.param1 !== "number" ||
         !("param2" in candidate) || typeof candidate.param2 !== "number"
@@ -126,15 +107,15 @@ function loadUserSlots(behaviors: GetBehaviorDetailsResponse[]): BindingSlot[] {
       const behavior = behaviors.find(({ displayName }) => displayName === candidate.behaviorName);
       if (!behavior) return [];
 
+      const binding = {
+        behaviorId: behavior.id,
+        param1: candidate.param1,
+        param2: candidate.param2,
+      };
       return [{
         id: candidate.id,
-        label: candidate.label,
         category: "user",
-        binding: {
-          behaviorId: behavior.id,
-          param1: candidate.param1,
-          param2: candidate.param2,
-        },
+        binding,
       }];
     });
   } catch (error) {
@@ -152,7 +133,6 @@ function saveUserSlots(slots: BindingSlot[], behaviors: GetBehaviorDetailsRespon
         if (!behaviorName) return [];
         return [{
           id: slot.id,
-          label: slot.label,
           behaviorName,
           param1: slot.binding.param1,
           param2: slot.binding.param2,
@@ -170,9 +150,9 @@ export interface SlotPaletteProps {
 }
 
 export function SlotPalette({ behaviors, layers }: SlotPaletteProps) {
-  const defaults = useMemo(() => createDefaultSlots(behaviors), [behaviors]);
+  const defaults = useMemo(() => createDefaultSlots(behaviors, layers.length), [behaviors, layers.length]);
   const [slots, setSlots] = useState<BindingSlot[]>([]);
-  const [editingId, setEditingId] = useState<string>();
+  const [draft, setDraft] = useState<SlotDraft>();
   const initialized = useRef(false);
   const skipNextSave = useRef(false);
 
@@ -185,6 +165,15 @@ export function SlotPalette({ behaviors, layers }: SlotPaletteProps) {
 
   useEffect(() => {
     if (!initialized.current) return;
+    setSlots((current) => {
+      const existingDefaults = new Map(current.filter((slot) => slot.category !== "user").map((slot) => [slot.id, slot]));
+      const next = [...current.filter((slot) => slot.category === "user"), ...defaults.map((slot) => existingDefaults.get(slot.id) || slot)];
+      return current.length === next.length && current.every((slot, index) => slot === next[index]) ? current : next;
+    });
+  }, [defaults]);
+
+  useEffect(() => {
+    if (!initialized.current) return;
     if (skipNextSave.current) {
       skipNextSave.current = false;
       return;
@@ -192,31 +181,42 @@ export function SlotPalette({ behaviors, layers }: SlotPaletteProps) {
     saveUserSlots(slots, behaviors);
   }, [behaviors, slots]);
 
-  const editingSlot = slots.find(({ id }) => id === editingId);
+  const editingSlot = draft?.slot;
   const categories = (["user", "mouse", "bluetooth", "shortcuts", "layers"] as SlotCategory[])
     .map((category) => ({ category, slots: slots.filter((slot) => slot.category === category) }))
     .filter(({ category, slots: categorySlots }) => category !== "user" || categorySlots.length > 0);
 
-  const updateSlot = (id: string, update: Partial<BindingSlot>) => {
-    setSlots((current) => current.map((slot) => slot.id === id ? { ...slot, ...update } : slot));
+  const updateDraft = (update: Partial<BindingSlot>) => {
+    setDraft((current) => current ? { ...current, slot: { ...current.slot, ...update } } : current);
   };
 
   const deleteUserSlot = (id: string) => {
     setSlots((current) => current.filter((slot) => slot.id !== id || slot.category !== "user"));
-    setEditingId(undefined);
+    setDraft(undefined);
+  };
+
+  const saveDraft = () => {
+    if (!draft) return;
+    const savedSlot = draft.slot;
+    setSlots((current) => draft.isNew
+      ? [savedSlot, ...current]
+      : current.map((slot) => slot.id === savedSlot.id ? savedSlot : slot)
+    );
+    setDraft(undefined);
   };
 
   const addSlot = () => {
     const firstBehavior = behaviors[0];
     if (!firstBehavior) return;
     const id = `user-${Date.now()}`;
-    setSlots((current) => [{
-      id,
-      label: "New slot",
-      category: "user",
-      binding: { behaviorId: firstBehavior.id, param1: 0, param2: 0 },
-    }, ...current]);
-    setEditingId(id);
+    setDraft({
+      isNew: true,
+      slot: {
+        id,
+        category: "user",
+        binding: { behaviorId: firstBehavior.id, param1: 0, param2: 0 },
+      },
+    });
   };
 
   return (
@@ -237,17 +237,21 @@ export function SlotPalette({ behaviors, layers }: SlotPaletteProps) {
                 <button
                   key={slot.id}
                   type="button"
-                  className={`nape-slot ${editingId === slot.id ? "is-editing" : ""}`}
+                  className={`nape-slot ${editingSlot?.id === slot.id ? "is-editing" : ""}`}
                   draggable
                   onDragStart={(event) => {
                     event.dataTransfer.effectAllowed = "copy";
                     event.dataTransfer.setData(NAPE_BINDING_MIME, JSON.stringify(slot.binding));
-                    event.dataTransfer.setData("text/plain", slot.label);
                   }}
-                  onClick={() => setEditingId((current) => current === slot.id ? undefined : slot.id)}
+                  onClick={() => setDraft((current) => current?.slot.id === slot.id
+                    ? undefined
+                    : { slot: { ...slot, binding: { ...slot.binding } }, isNew: false }
+                  )}
                 >
-                  <span>{slot.label}</span>
-                  <small>{behaviors.find(({ id }) => id === slot.binding.behaviorId)?.displayName}</small>
+                  <span>{behaviors.find(({ id }) => id === slot.binding.behaviorId)?.displayName || "Unknown"}</span>
+                  {bindingDisplayLines(slot.binding, behaviors, layers).slice(1).map((line, index) =>
+                    <small key={index}>{line}</small>
+                  )}
                 </button>
               ))}
             </div>
@@ -255,40 +259,41 @@ export function SlotPalette({ behaviors, layers }: SlotPaletteProps) {
         ))}
       </div>
       {editingSlot && (
-        <div className="nape-slot-modal-backdrop" onMouseDown={() => setEditingId(undefined)}>
+        <div className="nape-slot-modal-backdrop" onMouseDown={() => setDraft(undefined)}>
           <div
             className="nape-slot-editor"
             role="dialog"
             aria-modal="true"
-            aria-label={`Edit ${editingSlot.label}`}
+            aria-label="Edit slot"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <header>
               <div>
                 <span>Edit slot</span>
-                <input
-                  aria-label="Slot name"
-                  value={editingSlot.label}
-                  onChange={(event) => updateSlot(editingSlot.id, { label: event.target.value })}
-                />
+                <h2>{bindingDisplayLines(editingSlot.binding, behaviors, layers).map((line, index) =>
+                  <span key={index}>{line}</span>
+                )}</h2>
               </div>
-              <button type="button" onClick={() => setEditingId(undefined)} aria-label="Close editor">×</button>
+              <button type="button" onClick={() => setDraft(undefined)} aria-label="Cancel editing">×</button>
             </header>
             <div className="nape-slot-editor-body">
               <BehaviorBindingPicker
                 binding={editingSlot.binding}
                 behaviors={[...behaviors]}
                 layers={layers}
-                onBindingChanged={(binding) => updateSlot(editingSlot.id, { binding })}
+                onBindingChanged={(binding) => updateDraft({ binding })}
               />
             </div>
-            {editingSlot.category === "user" && (
-              <footer className="nape-slot-editor-footer">
-                <button type="button" onClick={() => deleteUserSlot(editingSlot.id)}>
+            <footer className="nape-slot-editor-footer">
+              <button type="button" className="nape-slot-save" onClick={saveDraft}>
+                Save
+              </button>
+              {editingSlot.category === "user" && !draft?.isNew && (
+                <button type="button" className="nape-slot-delete" onClick={() => deleteUserSlot(editingSlot.id)}>
                   Delete slot
                 </button>
-              </footer>
-            )}
+              )}
+            </footer>
           </div>
         </div>
       )}
