@@ -1,13 +1,20 @@
 # Nape Console
 
-Napeのキーマップを、ファームウェアを書き直さずに変更するための設定画面です。β版です。
+Napeのキーマップを、ファームウェアを書き直さずに変更するための設定画面です。現在はβ版です。
 
-公開予定のWeb版: <https://menbou0202.github.io/nape-console/>
-公開が完了するまではローカル開発版を使用してください。
+[Nape Consoleを開く](https://menbou0202.github.io/nape-console/)（デスクトップ版Chrome／Edge）
 
-デスクトップ版のChromeまたはEdgeでページを開き、**Nape Console対応UF2**を書き込んだNapeをUSB接続します。通常の`nape.uf2`や従来の`nape-studio.uf2`ではNape独自のCombo／ランタイム設定RPCは使用できません。変更を電源断後も残すには画面右上のSaveが必要です。
+## 使い始める
 
-現段階ではZMK StudioのUSB RPCを利用し、以下を実装しています。
+1. [`zmk-config-nape`の`console-beta`ブランチ](https://github.com/menbou0202/zmk-config-nape/tree/console-beta)でビルドされた`nape-console.uf2`をNapeに書き込みます。現時点では[成功したActions実行](https://github.com/menbou0202/zmk-config-nape/actions/runs/36231883233)の`firmware`成果物から入手できます。βリリースが公開された後は、そちらの添付ファイルを利用できます。
+2. 上のWebページを開き、NapeをUSB接続して「USB」を選びます。ほかのシリアル接続アプリがポートを開いている場合は閉じてください。
+3. Unlock画面が出たら、ファームウェアに設定されたStudio Unlockキーを押します。
+4. 左のスロットをキーへドラッグするか、キーの編集ボタンをクリックして割り当てます。Combos欄では同時押し、Runtime settingsではDPIやHold-Tap設定を変更できます。
+5. 変更を電源断後も残すには、画面右上の「Save」を押します。
+
+通常の`nape.uf2`や従来の`nape-studio.uf2`では、Nape独自のCombo／ランタイム設定RPCは使用できません。対応ファームウェアのソースは[`zmk-config-nape`の`console-beta`](https://github.com/menbou0202/zmk-config-nape/tree/console-beta)、ハードウェア設計は[`Nape`](https://github.com/menbou0202/Nape)にあります。
+
+ZMK StudioのUSB RPCを基に、以下を実装しています。
 
 - USB接続
 - レイヤー0〜11と追加レイヤーの表示・編集
@@ -19,6 +26,7 @@ Napeのキーマップを、ファームウェアを書き直さずに変更す�
 - キャンバスのパン・ズーム
 - 起動時の角度レイヤー（0〜7）とレイヤー別トラックボールDPIの設定
 - Hold-Tapのタイミングなど、ランタイム設定の保存・復元
+- Comboの追加・編集・削除
 
 今後の作業は[todo.md](todo.md)にまとめています。
 
