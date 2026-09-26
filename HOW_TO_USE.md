@@ -12,7 +12,7 @@ Nape Consoleは、Napeのキー割り当てをブラウザーから変更する�
 - デスクトップ版ChromeまたはEdge
 - Nape Console対応の`nape-console.uf2`を書き込んだNape
 
-対応UF2は[`zmk-config-nape`の`console-beta`ブランチ](https://github.com/menbou0202/zmk-config-nape/tree/console-beta)でビルドします。GitHub Releaseに配布用UF2がある場合はそれを使えます。Release公開前は[成功したGitHub Actionsの実行](https://github.com/menbou0202/zmk-config-nape/actions/runs/36231883233)から`firmware`成果物をダウンロードし、その中の`nape-console.uf2`を使ってください。Actionsの成果物のダウンロードにはGitHubへのログインが必要な場合があります。
+対応UF2は[Nape Console β1 Release](https://github.com/menbou0202/zmk-config-nape/releases/tag/nape-console-beta.1)から`nape-console.uf2`をダウンロードしてください。自分でビルドしたい場合は、[`zmk-config-nape`の`console-beta`ブランチ](https://github.com/menbou0202/zmk-config-nape/tree/console-beta)を使えます。
 
 従来の`nape.uf2`や`nape-studio.uf2`では、Nape Console独自のComboやランタイム設定を利用できません。UF2の書き込み方法は[Napeの組み立てガイド](https://github.com/menbou0202/Nape/blob/main/doc/build-guide.md)を参照してください。
 

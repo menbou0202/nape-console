@@ -8,7 +8,7 @@ Napeのキーマップを、ファームウェアを書き直さずに変更す�
 
 ## 使い始める
 
-1. [`zmk-config-nape`の`console-beta`ブランチ](https://github.com/menbou0202/zmk-config-nape/tree/console-beta)でビルドされた`nape-console.uf2`をNapeに書き込みます。現時点では[成功したActions実行](https://github.com/menbou0202/zmk-config-nape/actions/runs/36231883233)の`firmware`成果物から入手できます。βリリースが公開された後は、そちらの添付ファイルを利用できます。
+1. [Nape Console β1 Release](https://github.com/menbou0202/zmk-config-nape/releases/tag/nape-console-beta.1)に添付された`nape-console.uf2`をNapeに書き込みます。自分でビルドする場合は[`zmk-config-nape`の`console-beta`ブランチ](https://github.com/menbou0202/zmk-config-nape/tree/console-beta)を使えます。
 2. 上のWebページを開き、NapeをUSB接続して「USB」を選びます。ほかのシリアル接続アプリがポートを開いている場合は閉じてください。
 3. Unlock画面が出たら、ファームウェアに設定されたStudio Unlockキーを押します。
 4. 左のスロットをキーへドラッグするか、キーの編集ボタンをクリックして割り当てます。Combos欄では同時押し、Runtime settingsではDPIやHold-Tap設定を変更できます。
