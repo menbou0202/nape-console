@@ -181,17 +181,23 @@ export const AboutModal = ({ open, onClose }: AboutModalProps) => {
   return (
     <GenericModal ref={ref} className="min-w-min w-[70vw]" onClose={onClose}>
       <div className="flex justify-between items-start">
-        <p>
-          The ZMK Project:{" "}
-          <ExternalLink href="https://zmk.dev/">website</ExternalLink>,{" "}
-          <ExternalLink href="https://github.com/zmkfirmware/zmk/issues/">
-            GitHub Issues
-          </ExternalLink>
-          ,{" "}
-          <ExternalLink href="https://zmk.dev/community/discord/invite">
-            Discord Server
-          </ExternalLink>
-        </p>
+        <div>
+          <h2 className="text-xl font-semibold">About Nape Console</h2>
+          <p className="py-1">
+            Runtime keymap and trackball settings for Nape. {" "}
+            <ExternalLink href="https://github.com/menbou0202/nape-console">
+              Source and usage guide
+            </ExternalLink>
+            .
+          </p>
+          <p className="py-1">
+            Based on {" "}
+            <ExternalLink href="https://github.com/zmkfirmware/zmk-studio">
+              ZMK Studio
+            </ExternalLink>
+            . The original project and its contributors are credited below.
+          </p>
+        </div>
         <button
           className="p-1.5 rounded-md bg-gray-100 text-black hover:bg-gray-300"
           onClick={onClose}
@@ -201,9 +207,8 @@ export const AboutModal = ({ open, onClose }: AboutModalProps) => {
       </div>
       <div>
         <p className="py-1 mr-2">
-          ZMK Studio is made possible thanks to the generous donation of time
-          from our contributors, as well as the financial sponsorship from the
-          following vendors:
+          ZMK Studio was made possible by its contributors and the support of
+          the following sponsors:
         </p>
       </div>
       <div className="grid gap-2 auto-rows-auto grid-cols-[auto_minmax(min-content,1fr)] justify-items-center items-center">
